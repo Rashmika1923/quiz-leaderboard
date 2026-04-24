@@ -1,52 +1,52 @@
-# Quiz Leaderboard System — Bajaj Finserv Health Internship
+# Quiz Leaderboard System
 
-A production-grade **Spring Boot** backend application that consumes a quiz validator API, intelligently deduplicates distributed event data, aggregates per-participant scores, and submits a verified leaderboard.
-
----
-
-## 🧠 Problem Statement
-
-A quiz system delivers participant scores across multiple polling rounds. Due to the distributed nature of the system, **duplicate events** can appear across different API polls. The challenge is to:
-
-1. Poll the validator API **10 times** (with mandatory 5-second delays)
-2. Collect and **deduplicate** events using composite keys
-3. **Aggregate** scores per participant
-4. Generate a **sorted leaderboard**
-5. **Submit** the leaderboard and validate correctness
+A production-grade Spring Boot backend application that consumes a quiz validator API, intelligently deduplicates distributed event data, aggregates per-participant scores, and submits a verified leaderboard.
 
 ---
 
-## 🏗️ Architecture
+## Problem Statement
+
+A quiz system delivers participant scores across multiple polling rounds. Due to the distributed nature of the system, duplicate events can appear across different API polls. The challenge is to:
+
+1. Poll the validator API 10 times (with mandatory 5-second delays)
+2. Collect and deduplicate events using composite keys
+3. Aggregate scores per participant
+4. Generate a sorted leaderboard
+5. Submit the leaderboard and validate correctness
+
+---
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    QuizRunner (CLI)                      │
-│              CommandLineRunner — entry point             │
-├─────────────────────────────────────────────────────────┤
-│                     QuizService                          │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │  Polling  │→│ Deduplication│→│ Aggregation + Sort │  │
-│  │ (10 reqs) │  │ (Set<Key>)  │  │  (Map<P, Score>)  │  │
-│  └──────────┘  └──────────────┘  └───────────────────┘  │
-├─────────────────────────────────────────────────────────┤
-│              REST Client (RestTemplate)                  │
-│         ← GET /quiz/messages | POST /quiz/submit →      │
-└─────────────────────────────────────────────────────────┘
++---------------------------------------------------------+
+|                    QuizRunner (CLI)                     |
+|              CommandLineRunner - entry point            |
++---------------------------------------------------------+
+|                     QuizService                         |
+|  +----------+  +--------------+  +-------------------+  |
+|  |  Polling  |->| Deduplication|->| Aggregation + Sort|  |
+|  | (10 reqs) |  | (Set<Key>)   |  |  (Map<P, Score>)  |  |
+|  +----------+  +--------------+  +-------------------+  |
++---------------------------------------------------------+
+|              REST Client (RestTemplate)                 |
+|         <- GET /quiz/messages | POST /quiz/submit ->    |
++---------------------------------------------------------+
 ```
 
 ### Key Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| **Composite deduplication key** `roundId\|participant` | Uniquely identifies an event — same key across polls = duplicate |
-| **`HashSet<String>` for O(1) lookup** | Constant-time dedup regardless of event volume |
+| **Composite deduplication key** `roundId|participant` | Uniquely identifies an event - same key across polls = duplicate |
+| **HashSet for O(1) lookup** | Constant-time deduplication regardless of event volume |
 | **Stream-based aggregation** | Clean, functional-style score summation and sorting |
-| **`CommandLineRunner`** | Application runs as a CLI pipeline — no web server needed |
-| **Configurable via `application.properties`** | Easy to change regNo, poll count, delays without code changes |
+| **CommandLineRunner** | Application runs as a CLI pipeline |
+| **Configurable via properties** | Easy to adjust parameters without code changes |
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 src/main/java/com/bajaj/quiz/
@@ -54,137 +54,114 @@ src/main/java/com/bajaj/quiz/
 ├── config/
 │   └── AppConfig.java                # RestTemplate with timeouts
 ├── model/
-│   ├── Event.java                    # Quiz event (roundId, participant, score)
-│   ├── PollResponse.java             # GET /quiz/messages response
-│   ├── LeaderboardEntry.java         # Aggregated participant score
-│   ├── SubmitRequest.java            # POST /quiz/submit request body
-│   └── SubmitResponse.java           # POST /quiz/submit response body
+│   ├── Event.java                    # Quiz event model
+│   ├── PollResponse.java             # GET response model
+│   ├── LeaderboardEntry.java         # Aggregated score model
+│   ├── SubmitRequest.java            # POST request model
+│   └── SubmitResponse.java           # POST response model
 ├── service/
-│   └── QuizService.java              # Core logic — poll, dedup, aggregate, submit
+│   └── QuizService.java              # Core business logic
 └── runner/
-    └── QuizRunner.java               # CLI runner — orchestrates the pipeline
+    └── QuizRunner.java               # Execution pipeline
 ```
 
 ---
 
-## 🔑 Deduplication Strategy
+## Deduplication Strategy
 
-In distributed systems, **at-least-once delivery** is common — the same event may arrive in multiple polls. Naive aggregation would inflate scores:
-
-```
-❌ WRONG                           ✅ CORRECT
-Poll 1 → Alice R1 +10             Poll 1 → Alice R1 +10  (new key → count)
-Poll 3 → Alice R1 +10             Poll 3 → Alice R1 +10  (seen key → skip)
-Total = 20                        Total = 10
-```
-
-### Implementation
+In distributed systems, at-least-once delivery is common - the same event may arrive in multiple polls. Naive aggregation would inflate scores. This system uses a Set-based approach to ensure each unique event is processed exactly once.
 
 ```java
 Set<String> seen = new HashSet<>();
 for (Event e : allEvents) {
     String key = e.getRoundId() + "|" + e.getParticipant();
-    if (seen.add(key)) {   // returns false if already present
+    if (seen.add(key)) {
         uniqueEvents.add(e);
     }
 }
 ```
 
-The `Set.add()` method returns `false` when the element already exists — providing an atomic check-and-insert in a single operation.
+The `Set.add()` method returns `false` when the element already exists, providing an efficient check-and-insert operation.
 
 ---
 
-## 🚀 How to Run
+## How to Run
 
 ### Prerequisites
 
-- **Java 17+** (`java -version`)
-- **Maven 3.6+** (`mvn -version`)
+- Java 17+
+- Maven 3.6+ (or use the included mvnw)
 
 ### Steps
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/bajaj-finserv.git
-   cd bajaj-finserv
+   git clone <repository-url>
+   cd <project-directory>
    ```
 
-2. **Set your registration number** in `src/main/resources/application.properties`:
+2. **Configure your registration number** in `src/main/resources/application.properties`:
    ```properties
-   quiz.regNo=YOUR_REG_NUMBER_HERE
+   quiz.regNo=YOUR_REG_NUMBER
    ```
 
 3. **Build & Run**
    ```bash
-   mvn clean package -DskipTests
+   chmod +x mvnw
+   ./mvnw clean package -DskipTests
    java -jar target/quiz-leaderboard-1.0.0.jar
-   ```
-
-   Or run directly with Maven:
-   ```bash
-   mvn spring-boot:run
    ```
 
 ### Expected Output
 
 ```
-╔═══════════════════════════════════════════════════════════╗
-║          QUIZ LEADERBOARD SYSTEM — Bajaj Finserv         ║
-╚═══════════════════════════════════════════════════════════╝
++-----------------------------------------------------------+
+|              QUIZ LEADERBOARD SYSTEM                      |
++-----------------------------------------------------------+
+|  Registration : RA2311008020034                           |
++-----------------------------------------------------------+
 
 [Polling 10 times with 5-second intervals...]
 
-┌─────────────────────────────────────────────────────────┐
-│              🏆  FINAL LEADERBOARD  🏆                   │
-├──────┬───────────────────────┬──────────────────────────┤
-│ Rank │ Participant           │ Total Score              │
-├──────┼───────────────────────┼──────────────────────────┤
-│ 1    │ Alice                 │                      120 │
-│ 2    │ Bob                   │                      100 │
-└──────┴───────────────────────┴──────────────────────────┘
++------+---------------------+------------------+
+| Rank | Participant         | Total Score      |
++------+---------------------+------------------+
+| 1    | Diana               |              470 |
+| 2    | Ethan               |              455 |
+| 3    | Fiona               |              440 |
++------+---------------------+------------------+
+| GRAND TOTAL                 |             1365 |
++-----------------------------+------------------+
 
-╔═══════════════════════════════════════════════════════════╗
-║  ✅  SUBMISSION RESULT: CORRECT!                         ║
-╚═══════════════════════════════════════════════════════════╝
++-----------------------------------------------------------+
+|  SUBMISSION RESULT: CORRECT                               |
++-----------------------------------------------------------+
+|  Idempotent  : true                                       |
+|  Submitted   : 1365                                       |
+|  ...                                                      |
++-----------------------------------------------------------+
 ```
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
-All settings are externalized in `application.properties`:
+Settings are managed via `application.properties`:
 
-| Property | Default | Description |
-|----------|---------|-------------|
-| `quiz.regNo` | — | Your registration number (required) |
-| `quiz.api.base-url` | `https://devapigw.vidalhealthtpa.com/srm-quiz-task` | Validator API base URL |
-| `quiz.api.poll-count` | `10` | Number of polls to execute |
-| `quiz.api.poll-delay-ms` | `5000` | Delay between polls (milliseconds) |
-
----
-
-## 🛡️ Error Handling
-
-- **Network failures**: Each poll is wrapped in try-catch — individual failures don't crash the pipeline
-- **Empty responses**: Gracefully handled with null-checks on event lists
-- **Thread interruption**: Clean interruption handling during mandatory sleep periods
-- **Timeout protection**: RestTemplate configured with 10s connect and 30s read timeouts
+| Property | Description |
+|----------|-------------|
+| `quiz.regNo` | Participant registration number |
+| `quiz.api.base-url` | Validator API base URL |
+| `quiz.api.poll-count` | Number of polls (default: 10) |
+| `quiz.api.poll-delay-ms` | Polling interval (default: 5000ms) |
 
 ---
 
-## 📊 Tech Stack
+## Tech Stack
 
-| Technology | Version | Purpose |
-|-----------|---------|---------|
-| Java | 17 | Runtime |
-| Spring Boot | 3.2.5 | Application framework |
-| RestTemplate | — | HTTP client for API communication |
-| Jackson | — | JSON serialization/deserialization |
-| Maven | — | Build tool |
-| SLF4J + Logback | — | Structured logging |
-
----
-
-## 📝 License
-
-This project was created as part of the Bajaj Finserv Health internship selection process.
+- Java 17
+- Spring Boot 3.2.5
+- Maven (Build Tool)
+- RestTemplate (HTTP Client)
+- Jackson (JSON Processing)
+- SLF4J + Logback (Logging)

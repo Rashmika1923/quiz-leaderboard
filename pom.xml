@@ -15,7 +15,7 @@
     <artifactId>quiz-leaderboard</artifactId>
     <version>1.0.0</version>
     <name>Quiz Leaderboard System</name>
-    <description>Backend system for Bajaj Finserv Quiz Leaderboard — polls, deduplicates, aggregates, and submits participant scores</description>
+    <description>Backend system for Quiz Leaderboard - polls, deduplicates, aggregates, and submits participant scores</description>
 
     <properties>
         <java.version>17</java.version>

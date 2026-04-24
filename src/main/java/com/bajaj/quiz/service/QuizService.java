@@ -53,9 +53,9 @@ public class QuizService {
         this.restTemplate = restTemplate;
     }
 
-    // ───────────────────────────────────────────────────────────
+    // -----------------------------------------------------------
     //  1. POLL ALL MESSAGES
-    // ───────────────────────────────────────────────────────────
+    // -----------------------------------------------------------
 
     /**
      * Calls GET /quiz/messages for poll indices 0 through 9,
@@ -73,7 +73,7 @@ public class QuizService {
                     .queryParam("poll", poll)
                     .toUriString();
 
-            log.info("⏳ Polling [{}/{}] → {}", poll + 1, pollCount, url);
+            log.info("Polling [{}/{}] -> {}", poll + 1, pollCount, url);
 
             try {
                 ResponseEntity<PollResponse> response =
@@ -82,23 +82,23 @@ public class QuizService {
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                     PollResponse body = response.getBody();
                     int eventCount = body.getEvents() != null ? body.getEvents().size() : 0;
-                    log.info("✅ Poll {} received — setId={}, events={}", poll, body.getSetId(), eventCount);
+                    log.info("Poll {} received -- setId={}, events={}", poll, body.getSetId(), eventCount);
                     responses.add(body);
                 } else {
-                    log.warn("⚠️  Poll {} returned status {}", poll, response.getStatusCode());
+                    log.warn("Poll {} returned status {}", poll, response.getStatusCode());
                 }
             } catch (Exception e) {
-                log.error("❌ Poll {} failed: {}", poll, e.getMessage());
+                log.error("Poll {} failed: {}", poll, e.getMessage());
             }
 
             // Mandatory delay between polls (skip after the last one)
             if (poll < pollCount - 1) {
-                log.info("💤 Waiting {} ms before next poll...", pollDelayMs);
+                log.info("Waiting {} ms before next poll...", pollDelayMs);
                 sleep(pollDelayMs);
             }
         }
 
-        log.info("📦 Polling complete — {} responses collected", responses.size());
+        log.info("Polling complete -- {} responses collected", responses.size());
         return responses;
     }
 
@@ -126,13 +126,13 @@ public class QuizService {
                 if (seen.add(key)) {        // returns true only if the key was NOT already present
                     unique.add(e);
                 } else {
-                    log.debug("🔁 Duplicate ignored: {}", key);
+                    log.debug("Duplicate ignored: {}", key);
                 }
             }
         }
 
         int dupes = totalRaw - unique.size();
-        log.info("🔍 Deduplication: {} raw events → {} unique, {} duplicates removed",
+        log.info("Deduplication: {} raw events -> {} unique, {} duplicates removed",
                 totalRaw, unique.size(), dupes);
         return unique;
     }
@@ -161,7 +161,7 @@ public class QuizService {
                 .sorted(Comparator.comparingInt(LeaderboardEntry::getTotalScore).reversed())
                 .collect(Collectors.toList());
 
-        log.info("🏆 Leaderboard built with {} participants", leaderboard.size());
+        log.info("Leaderboard built with {} participants", leaderboard.size());
         return leaderboard;
     }
 
@@ -185,14 +185,14 @@ public class QuizService {
 
         HttpEntity<SubmitRequest> entity = new HttpEntity<>(request, headers);
 
-        log.info("📤 Submitting leaderboard to {} ...", url);
+        log.info("Submitting leaderboard to {} ...", url);
 
         ResponseEntity<SubmitResponse> response =
                 restTemplate.postForEntity(url, entity, SubmitResponse.class);
 
         SubmitResponse body = response.getBody();
         if (body != null) {
-            log.info("📬 Submission Response — correct={}, idempotent={}, submitted={}, expected={}, message={}",
+            log.info("Submission response -- correct={}, idempotent={}, submitted={}, expected={}, message={}",
                     body.isCorrect(), body.isIdempotent(),
                     body.getSubmittedTotal(), body.getExpectedTotal(), body.getMessage());
         }
